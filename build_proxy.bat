@@ -3,7 +3,7 @@ setlocal
 title DL1 Speed Trainer - Build and Deploy
 
 set "VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-set "TRAINER_DIR=C:\Users\shotg\Desktop\DL Trainer"
+set "TRAINER_DIR=%~dp0"
 set "GAME_DIR=D:\Dying Light - Platinum Edition"
 
 echo.
