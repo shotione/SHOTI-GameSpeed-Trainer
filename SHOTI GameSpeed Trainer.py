@@ -1,56 +1,59 @@
 """
-shotilive_trainer.py
-SHOTI's Very Legit Game Speed Adjuster With A Short And Cool Name
+SHOTI GameSpeed Trainer
+Dying Light 1 — Real-time speed controller
 
-Put this file + all PNG assets + Chewy.ttf in the same folder.
 Requirements: pip install Pillow
+Assets: Look\ folder next to this script
 """
 
 import ctypes
 import ctypes.wintypes
-import struct
+import json
 import os
+import struct
 import sys
 import tkinter as tk
+import tkinter.messagebox as mb
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 # ═══════════════════════════════════════════════════════════════════
 #  PATHS
 # ═══════════════════════════════════════════════════════════════════
-# When frozen by PyInstaller, files are in sys._MEIPASS (temp extraction folder).
-# When running as a .py, they're next to the script.
 if getattr(sys, "frozen", False):
-    HERE = os.path.join(sys._MEIPASS, "Look")
+    HERE    = os.path.join(sys._MEIPASS, "Look")
+    EXE_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
-    HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Look")
+    HERE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Look")
+    EXE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CONFIG_PATH = os.path.join(EXE_DIR, "hotkeys.json")
 
 def A(name):
     return os.path.join(HERE, name)
 
 # ═══════════════════════════════════════════════════════════════════
-#  LAYOUT CONSTANTS  (all measured from the reference screenshot)
+#  LAYOUT CONSTANTS  — edit these to move things around
 # ═══════════════════════════════════════════════════════════════════
 WIN_W, WIN_H = 619, 853
 
-# Slider
 SL_LEFT    = 32
 SL_RIGHT   = 587
-SL_WIDTH   = SL_RIGHT - SL_LEFT          # 555 px
+SL_WIDTH   = SL_RIGHT - SL_LEFT
 SL_MIN     = 0.05
 SL_MAX     = 4.00
-SL_TRACK_Y = 360                          # vertical centre of the track image
+SL_TRACK_Y = 360
 
-# Crane head thumb  (image is 104 × 117)
 THUMB_W, THUMB_H = 104, 100
-THUMB_TOP_Y = SL_TRACK_Y - THUMB_H // 2  # 302
+THUMB_TOP_Y = SL_TRACK_Y - THUMB_H // 2
 
-# Speed readout sits below the thumb
 READOUT_Y = 390
 
-# Status indicator (top-left corner of image)
 STATUS_X, STATUS_Y = 10, 185
 
-# Preset buttons  (images are 95 × 95 each)
+# Hotkey changer button (hotkey_changer.png scaled to fit)
+HKB_X, HKB_Y = 443, 208   # top-left position in window
+HKB_W, HKB_H = 144, 30    # display size
+
 BTN_SIZE = 95
 PRESET_BTNS = [
     (0.25,  37, 485, "0.25x_button.png",  "0.25x_button_pressed.png"),
@@ -59,29 +62,74 @@ PRESET_BTNS = [
     (4.00, 499, 485, "4.00x_button.png",  "4.00x_button_pressed.png"),
 ]
 
-# 100× button
-# not-pressed: 557 × 105   pressed: 557 × 251  (bottom-aligned)
 BTN100_X    = 31
 BTN100_NP_Y = 716
 BTN100_NP_H = 105
 BTN100_PR_H = 251
-BTN100_PR_Y = 580   # 570
+BTN100_PR_Y = 580
 
 # ═══════════════════════════════════════════════════════════════════
-#  GAME / SHM CONSTANTS
+#  SPEED CONSTANTS
 # ═══════════════════════════════════════════════════════════════════
-PROCESS_NAME        = "DyingLightGame.exe"
-SHM_NAME            = "DL1Hook_v3"
-SHM_SIZE            = 16
-FILE_MAP_ALL_ACCESS = 0x000F001F
-
 SPEED_NORMAL = 1.00
 SPEED_LOWEST = 0.05
 SPEED_SLOW   = 0.25
 SPEED_FAST   = 4.00
 SPEED_CHAOS  = 100.0
+SPEED_FREEZE = 0.0001   # photo mode — near-freeze, mouse look still works
 
-VK_F1, VK_F2, VK_F3, VK_F4 = 0x70, 0x71, 0x72, 0x73
+# ═══════════════════════════════════════════════════════════════════
+#  VK CODE MAP  — used for hotkey display and config
+# ═══════════════════════════════════════════════════════════════════
+VK_NAMES = {
+    # Mouse buttons
+    0x01: "M1",    0x02: "M2",    0x04: "M3",
+    0x05: "M4",    0x06: "M5",
+    # Function keys
+    0x70: "F1",  0x71: "F2",  0x72: "F3",  0x73: "F4",
+    0x74: "F5",  0x75: "F6",  0x76: "F7",  0x77: "F8",
+    0x78: "F9",  0x79: "F10", 0x7A: "F11", 0x7B: "F12",
+    # Number row
+    0x30: "0",   0x31: "1",   0x32: "2",   0x33: "3",
+    0x34: "4",   0x35: "5",   0x36: "6",   0x37: "7",
+    0x38: "8",   0x39: "9",
+    # Letters
+    0x41: "A",   0x42: "B",   0x43: "C",   0x44: "D",
+    0x45: "E",   0x46: "F",   0x47: "G",   0x48: "H",
+    0x49: "I",   0x4A: "J",   0x4B: "K",   0x4C: "L",
+    0x4D: "M",   0x4E: "N",   0x4F: "O",   0x50: "P",
+    0x51: "Q",   0x52: "R",   0x53: "S",   0x54: "T",
+    0x55: "U",   0x56: "V",   0x57: "W",   0x58: "X",
+    0x59: "Y",   0x5A: "Z",
+    # Numpad
+    0x60: "Num0",0x61: "Num1",0x62: "Num2",0x63: "Num3",
+    0x64: "Num4",0x65: "Num5",0x66: "Num6",0x67: "Num7",
+    0x68: "Num8",0x69: "Num9",
+    # Nav
+    0x24: "Home",0x23: "End", 0x21: "PgUp",0x22: "PgDn",
+    0x2D: "Ins", 0x2E: "Del",
+    # Special
+    0x08: "Back",0x0D: "Enter",0x20: "Space",
+    0xBB: "=",   0xBD: "-",   0xDB: "[",   0xDD: "]",
+    0xBA: ";",   0xDE: "'",   0xBC: ",",   0xBE: ".",
+}
+NAME_TO_VK = {v: k for k, v in VK_NAMES.items()}
+
+# Default hotkey bindings: {slot_name: vk_code}
+DEFAULT_HOTKEYS = {
+    "normal": 0x70,   # F1
+    "lowest": 0x71,   # F2
+    "slow":   0x72,   # F3
+    "fast":   0x73,   # F4
+    "freeze": 0x74,   # F5
+}
+HOTKEY_LABELS = {
+    "normal": "Normal (1.0×)",
+    "lowest": "Lowest (0.05×)",
+    "slow":   "Slow (0.25×)",
+    "fast":   "Fast (4.0×)",
+    "freeze": "Freeze (Photo)",
+}
 
 # ═══════════════════════════════════════════════════════════════════
 #  WIN32
@@ -99,6 +147,11 @@ _MapViewOfFile.restype   = ctypes.c_void_p
 # ═══════════════════════════════════════════════════════════════════
 #  SHARED MEMORY
 # ═══════════════════════════════════════════════════════════════════
+SHM_NAME        = "DL1Hook_v3"
+SHM_SIZE        = 16
+FILE_MAP_ALL    = 0x000F001F
+PROCESS_NAME    = "DyingLightGame.exe"
+
 class SHMWriter:
     def __init__(self):
         self._handle = self._view = None
@@ -110,10 +163,10 @@ class SHMWriter:
     def try_connect(self):
         if self.connected:
             return True
-        h = _OpenFileMapping(FILE_MAP_ALL_ACCESS, False, SHM_NAME)
+        h = _OpenFileMapping(FILE_MAP_ALL, False, SHM_NAME)
         if not h:
             return False
-        v = _MapViewOfFile(h, FILE_MAP_ALL_ACCESS, 0, 0, SHM_SIZE)
+        v = _MapViewOfFile(h, FILE_MAP_ALL, 0, 0, SHM_SIZE)
         if not v:
             _CloseHandle(h)
             return False
@@ -136,9 +189,7 @@ class SHMWriter:
 #  HELPERS
 # ═══════════════════════════════════════════════════════════════════
 def _game_running():
-    """Check if DyingLightGame.exe is running via Toolhelp32 — pure Win32, no subprocess."""
-    TH32CS_SNAPPROCESS = 0x00000002
-
+    """Win32 process check — no subprocess, no CMD flash."""
     class PROCESSENTRY32(ctypes.Structure):
         _fields_ = [
             ("dwSize",              ctypes.wintypes.DWORD),
@@ -152,25 +203,23 @@ def _game_running():
             ("dwFlags",             ctypes.wintypes.DWORD),
             ("szExeFile",           ctypes.c_char * 260),
         ]
-
-    k32    = ctypes.windll.kernel32
-    snap   = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    snap = _k32.CreateToolhelp32Snapshot(0x00000002, 0)
     if snap == ctypes.wintypes.HANDLE(-1).value:
         return False
-    entry          = PROCESSENTRY32()
-    entry.dwSize   = ctypes.sizeof(PROCESSENTRY32)
-    target         = PROCESS_NAME.lower().encode()
-    found          = False
+    entry        = PROCESSENTRY32()
+    entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+    target       = PROCESS_NAME.lower().encode()
+    found        = False
     try:
-        if k32.Process32First(snap, ctypes.byref(entry)):
+        if _k32.Process32First(snap, ctypes.byref(entry)):
             while True:
                 if entry.szExeFile.lower() == target:
                     found = True
                     break
-                if not k32.Process32Next(snap, ctypes.byref(entry)):
+                if not _k32.Process32Next(snap, ctypes.byref(entry)):
                     break
     finally:
-        k32.CloseHandle(snap)
+        _k32.CloseHandle(snap)
     return found
 
 def _load(filename):
@@ -200,26 +249,196 @@ def _get_font(size):
 
 _FONT = None
 
-def _render_readout(value: float, chaos: bool = False) -> Image.Image:
+def _render_readout(value: float, chaos: bool = False, freeze: bool = False) -> Image.Image:
     global _FONT
     if _FONT is None:
         _FONT = _get_font(30)
-
-    text  = f"{int(value)}×" if chaos else f"{value:.2f}"
-    color = (255, 55, 55, 255) if chaos else (255, 255, 255, 255)
-
+    if freeze:
+        text  = "FREEZE"
+        color = (100, 180, 255, 255)
+    elif chaos:
+        text  = f"{int(value)}×"
+        color = (255, 55, 55, 255)
+    else:
+        text  = f"{value:.2f}"
+        color = (255, 255, 255, 255)
     dummy = Image.new("RGBA", (1, 1))
     bbox  = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=_FONT)
-    tw, th = bbox[2] - bbox[0] + 6, bbox[3] - bbox[1] + 6
-
-    img  = Image.new("RGBA", (tw + 6, th + 6), (0, 0, 0, 0))
-    d    = ImageDraw.Draw(img)
+    tw    = bbox[2] - bbox[0] + 6
+    th    = bbox[3] - bbox[1] + 6
+    img   = Image.new("RGBA", (tw + 6, th + 6), (0, 0, 0, 0))
+    d     = ImageDraw.Draw(img)
     d.text((3, 3), text, font=_FONT, fill=(0, 0, 0, 180))
     d.text((1, 1), text, font=_FONT, fill=color)
     return img
 
+def _load_hotkeys() -> dict:
+    try:
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+        # Validate — make sure all expected keys exist
+        result = dict(DEFAULT_HOTKEYS)
+        for k, v in data.items():
+            if k in result and isinstance(v, int):
+                result[k] = v
+        return result
+    except Exception:
+        return dict(DEFAULT_HOTKEYS)
+
+def _save_hotkeys(hk: dict):
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(hk, f, indent=2)
+    except Exception:
+        pass
+
+def _vk_name(vk: int) -> str:
+    return VK_NAMES.get(vk, f"0x{vk:02X}")
+
 # ═══════════════════════════════════════════════════════════════════
-#  APP
+#  HOTKEY SETTINGS DIALOG
+# ═══════════════════════════════════════════════════════════════════
+class HotkeyDialog(tk.Toplevel):
+
+    BG    = "#0d0d0d"
+    PANEL = "#1a1a1a"
+    RED   = "#e8003a"
+    FG    = "#cccccc"
+    DIM   = "#555555"
+    BLUE  = "#3399ff"
+
+    def __init__(self, parent, hotkeys: dict, callback):
+        super().__init__(parent)
+        self.title("Hotkey Settings")
+        self.configure(bg=self.BG)
+        self.resizable(False, False)
+        self.grab_set()                      # modal
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self._parent   = parent
+        self._hotkeys  = dict(hotkeys)      # working copy
+        self._callback = callback
+        self._binding  = None               # slot currently being rebound
+        self._poll_id  = None
+
+        self._build_ui()
+        self._center()
+
+    def _center(self):
+        self.update_idletasks()
+        pw = self._parent.winfo_x() + self._parent.winfo_width() // 2
+        ph = self._parent.winfo_y() + self._parent.winfo_height() // 2
+        w, h = self.winfo_width(), self.winfo_height()
+        self.geometry(f"+{pw - w // 2}+{ph - h // 2}")
+
+    def _build_ui(self):
+        tk.Label(self, text="HOTKEY SETTINGS",
+                 bg=self.RED, fg="white",
+                 font=("Impact", 14, "bold"),
+                 width=30).pack(fill="x", ipady=8)
+
+        tk.Label(self,
+                 text="Click a key button then press any key to rebind.",
+                 bg=self.BG, fg=self.DIM,
+                 font=("Consolas", 8)).pack(pady=(8, 4))
+
+        frame = tk.Frame(self, bg=self.BG)
+        frame.pack(padx=20, pady=4)
+
+        self._btn_refs = {}
+
+        for slot, label in HOTKEY_LABELS.items():
+            row = tk.Frame(frame, bg=self.BG)
+            row.pack(fill="x", pady=3)
+
+            tk.Label(row, text=label, width=18, anchor="w",
+                     bg=self.BG, fg=self.FG,
+                     font=("Consolas", 9)).pack(side="left")
+
+            btn = tk.Button(
+                row,
+                text=_vk_name(self._hotkeys[slot]),
+                width=8,
+                bg=self.PANEL, fg=self.FG, relief="flat",
+                activebackground=self.RED, activeforeground="white",
+                font=("Consolas", 9, "bold"),
+                cursor="hand2",
+                command=lambda s=slot: self._start_bind(s)
+            )
+            btn.pack(side="left", padx=(8, 0), ipady=4)
+            self._btn_refs[slot] = btn
+
+        # Buttons row
+        brow = tk.Frame(self, bg=self.BG)
+        brow.pack(pady=12, padx=20, fill="x")
+
+        tk.Button(brow, text="Reset Defaults",
+                  bg=self.PANEL, fg=self.DIM, relief="flat",
+                  font=("Consolas", 8), cursor="hand2",
+                  command=self._reset).pack(side="left")
+
+        tk.Button(brow, text="Save & Close",
+                  bg=self.RED, fg="white", relief="flat",
+                  activebackground="#c0002d",
+                  font=("Consolas", 9, "bold"), cursor="hand2",
+                  command=self._save).pack(side="right", ipadx=10, ipady=4)
+
+    def _start_bind(self, slot):
+        """Highlight the button and start listening for a key."""
+        if self._poll_id:
+            self.after_cancel(self._poll_id)
+            self._poll_id = None
+
+        # Reset all buttons to normal state
+        for s, b in self._btn_refs.items():
+            b.config(bg=self.PANEL, fg=self.FG, text=_vk_name(self._hotkeys[s]))
+
+        self._binding = slot
+        self._btn_refs[slot].config(
+            bg=self.BLUE, fg="white", text="Press a key...")
+
+        self._poll_bind()
+
+    def _poll_bind(self):
+        """Poll GetAsyncKeyState for any key press."""
+        if self._binding is None:
+            return
+
+        # Scan all keys in our VK map
+        for vk in VK_NAMES:
+            if _u32.GetAsyncKeyState(vk) & 0x8001:
+                # Key pressed — bind it
+                self._hotkeys[self._binding] = vk
+                self._btn_refs[self._binding].config(
+                    bg=self.PANEL, fg=self.FG, text=_vk_name(vk))
+                self._binding = None
+                return
+
+        self._poll_id = self.after(50, self._poll_bind)
+
+    def _reset(self):
+        if self._binding:
+            self._binding = None
+            if self._poll_id:
+                self.after_cancel(self._poll_id)
+        self._hotkeys = dict(DEFAULT_HOTKEYS)
+        for slot, btn in self._btn_refs.items():
+            btn.config(text=_vk_name(self._hotkeys[slot]),
+                       bg=self.PANEL, fg=self.FG)
+
+    def _save(self):
+        _save_hotkeys(self._hotkeys)
+        self._callback(self._hotkeys)
+        self._on_close()
+
+    def _on_close(self):
+        if self._poll_id:
+            self.after_cancel(self._poll_id)
+        self.grab_release()
+        self.destroy()
+
+# ═══════════════════════════════════════════════════════════════════
+#  MAIN APP
 # ═══════════════════════════════════════════════════════════════════
 class TrainerApp(tk.Tk):
 
@@ -228,26 +447,32 @@ class TrainerApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("SHOTI GameSpeed Trainer")
+        self.title("SHOTI's Very Legit Game Speed Adjuster With A Short And Cool Name")
         self.resizable(False, False)
 
         self._shm         = SHMWriter()
         self._speed       = 1.0
         self._chaos       = False
-        self._chaos_on    = False  # 100x toggle: True = latched on
-        self._pre_chaos   = 1.0   # speed to restore when toggling off
+        self._chaos_on    = False
+        self._pre_chaos   = 1.0
+        self._freeze_on   = False
+        self._pre_freeze  = 1.0
         self._dragging    = False
-        self._btn_down    = None   # index 0-3 of pressed preset button
+        self._btn_down    = None
         self._100_down    = False
-        self._refs        = []     # PhotoImage reference pool (dynamic, cycling)
-        self._static_refs = []     # PhotoImage reference pool (static, permanent)
+        self._hkb_down    = False
+        self._closing     = False
+        self._refs        = []
+        self._static_refs = []
+        self._hotkeys     = _load_hotkeys()
+        self._key_down    = {vk: False for vk in self._hotkeys.values()}
 
         self._load_assets()
         self._build_canvas()
         self._redraw_all()
-        self._register_hotkeys()
-        self._poll_game()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._poll_game()
+        self._poll_hotkeys()
 
     # ── asset loading ─────────────────────────────────────────────
     def _load_assets(self):
@@ -258,6 +483,13 @@ class TrainerApp(tk.Tk):
         self._crane      = _load("crane_head.png")
         self._b100_np    = _load("100x_speed_not_pressed.png")
         self._b100_pr    = _load("100x_speed pressed.png")
+
+        # Hotkey changer button — scale to display size
+        hkb_raw           = _load("hotkey_changer.png")
+        self._hkb_normal  = hkb_raw.resize((HKB_W, HKB_H), Image.LANCZOS)
+        # Pressed state: slightly darkened
+        import PIL.ImageEnhance
+        self._hkb_pressed = PIL.ImageEnhance.Brightness(self._hkb_normal).enhance(0.7)
 
         self._btn_normal  = []
         self._btn_pressed = []
@@ -273,7 +505,6 @@ class TrainerApp(tk.Tk):
         c.pack()
         self._c = c
 
-        # Create all canvas image items (z-order: first = bottom)
         self._id_bg      = c.create_image(0, 0, anchor="nw")
         self._id_status  = c.create_image(STATUS_X, STATUS_Y, anchor="nw")
         self._id_track   = c.create_image(SL_LEFT, SL_TRACK_Y - 10, anchor="nw")
@@ -283,19 +514,21 @@ class TrainerApp(tk.Tk):
                             for _, bx, by, _, _ in PRESET_BTNS]
         self._id_100     = c.create_image(BTN100_X, BTN100_NP_Y, anchor="nw")
 
+        # Right-click anywhere → open hotkey settings
+        self._id_hkb = c.create_image(HKB_X, HKB_Y, anchor="nw")
+
         c.bind("<ButtonPress-1>",   self._on_press)
         c.bind("<B1-Motion>",       self._on_drag)
         c.bind("<ButtonRelease-1>", self._on_release)
+        c.bind("<ButtonPress-3>",   self._on_right_click)
 
     # ── reference management ──────────────────────────────────────
     def _static_ref(self, pil_img):
-        """Permanent reference — never garbage collected."""
         ph = _to_tk(pil_img)
         self._static_refs.append(ph)
         return ph
 
     def _dyn_ref(self, pil_img):
-        """Dynamic reference — small cycling pool for readout only."""
         ph = _to_tk(pil_img)
         self._refs.append(ph)
         if len(self._refs) > 12:
@@ -311,6 +544,7 @@ class TrainerApp(tk.Tk):
         self._draw_thumb_and_readout()
         self._draw_btns()
         self._draw_100()
+        self._draw_hkb(False)
 
     def _draw_status(self, connected: bool):
         img = self._connected if connected else self._disconn
@@ -321,8 +555,10 @@ class TrainerApp(tk.Tk):
         self._c.coords(self._id_thumb, px - THUMB_W // 2, THUMB_TOP_Y)
         self._c.itemconfig(self._id_thumb, image=self._static_ref(self._crane))
         self._c.coords(self._id_readout, px, READOUT_Y)
-        rd = _render_readout(SPEED_CHAOS if self._chaos else self._speed,
-                             chaos=self._chaos)
+        rd = _render_readout(
+            SPEED_CHAOS if self._chaos else self._speed,
+            chaos=self._chaos,
+            freeze=self._freeze_on)
         self._c.itemconfig(self._id_readout, image=self._dyn_ref(rd))
 
     def _draw_btns(self):
@@ -338,15 +574,24 @@ class TrainerApp(tk.Tk):
             self._c.coords(self._id_100, BTN100_X, BTN100_NP_Y)
             self._c.itemconfig(self._id_100, image=self._static_ref(self._b100_np))
 
+    def _draw_hkb(self, pressed: bool):
+        img = self._hkb_pressed if pressed else self._hkb_normal
+        self._c.itemconfig(self._id_hkb, image=self._static_ref(img))
+
     # ── speed control ─────────────────────────────────────────────
-    def _apply_speed(self, val: float, chaos: bool = False):
-        self._chaos = chaos
+    def _apply_speed(self, val: float, chaos: bool = False, freeze: bool = False):
+        self._chaos  = chaos
+        self._freeze_on = freeze
         if chaos:
             self._speed = SL_MAX
             self._shm.write(SPEED_CHAOS)
+        elif freeze:
+            self._speed = SL_MIN   # thumb at left edge visually
+            self._shm.write(SPEED_FREEZE)
         else:
-            self._chaos_on = False
-            self._speed = max(SL_MIN, min(SL_MAX, val))
+            self._chaos_on  = False
+            self._freeze_on = False
+            self._speed     = max(SL_MIN, min(SL_MAX, val))
             self._shm.write(self._speed)
         self._draw_thumb_and_readout()
         self._draw_100()
@@ -366,6 +611,9 @@ class TrainerApp(tk.Tk):
         return (BTN100_X <= x <= BTN100_X + 557 and
                 BTN100_NP_Y <= y <= BTN100_NP_Y + BTN100_NP_H)
 
+    def _hit_hkb(self, x, y):
+        return HKB_X <= x <= HKB_X + HKB_W and HKB_Y <= y <= HKB_Y + HKB_H
+
     # ── mouse events ──────────────────────────────────────────────
     def _on_press(self, e):
         if self._hit_slider(e.x, e.y):
@@ -380,6 +628,10 @@ class TrainerApp(tk.Tk):
         if self._hit_100(e.x, e.y):
             self._100_down = True
             self._draw_100()
+            return
+        if self._hit_hkb(e.x, e.y):
+            self._hkb_down = True
+            self._draw_hkb(True)
 
     def _on_drag(self, e):
         if self._dragging:
@@ -401,61 +653,78 @@ class TrainerApp(tk.Tk):
             self._100_down = False
             if self._hit_100(e.x, e.y):
                 if self._chaos_on:
-                    # Toggle OFF — restore previous speed
                     self._chaos_on = False
                     self._chaos    = False
                     self._apply_speed(self._pre_chaos)
                 else:
-                    # Toggle ON — save current speed, go chaos
                     self._chaos_on  = True
                     self._pre_chaos = self._speed
                     self._apply_speed(0, chaos=True)
             self._draw_100()
 
+        if self._hkb_down:
+            self._hkb_down = False
+            self._draw_hkb(False)
+            if self._hit_hkb(e.x, e.y):
+                self._open_hotkey_settings()
+
+    def _on_right_click(self, e):
+        """Right-click anywhere to open hotkey settings."""
+        self._open_hotkey_settings()
+
     def _slide_to(self, x):
-        self._chaos    = False
-        self._chaos_on = False
-        self._speed = _px_to_val(x)
+        self._chaos     = False
+        self._chaos_on  = False
+        self._freeze_on = False
+        self._speed     = _px_to_val(x)
         self._shm.write(self._speed)
         self._draw_thumb_and_readout()
         self._draw_100()
 
-    # ── hotkeys  (GetAsyncKeyState polling — no callbacks, no GIL risk) ─
-    # GetAsyncKeyState works globally regardless of which window has focus.
-    # We poll it from the tkinter loop (main thread) every HOTKEY_MS ms.
-    # High bit set = key is currently held down.  We track previous state
-    # so each press fires exactly once even if the key is held.
+    # ── hotkey settings ───────────────────────────────────────────
+    def _open_hotkey_settings(self):
+        HotkeyDialog(self, self._hotkeys, self._on_hotkeys_saved)
 
-    def _register_hotkeys(self):
-        self._key_down = {VK_F1: False, VK_F2: False,
-                          VK_F3: False, VK_F4: False}
-        self._poll_hotkeys()
+    def _on_hotkeys_saved(self, new_hotkeys: dict):
+        self._hotkeys  = new_hotkeys
+        self._key_down = {vk: False for vk in self._hotkeys.values()}
 
+    # ── hotkey polling ────────────────────────────────────────────
     def _poll_hotkeys(self):
-        _gas = _u32.GetAsyncKeyState
-        for vk, speed in (
-            (VK_F1, SPEED_NORMAL),
-            (VK_F2, SPEED_LOWEST),
-            (VK_F3, SPEED_SLOW),
-            (VK_F4, SPEED_FAST),
-        ):
-            pressed = bool(_gas(vk) & 0x8000)
-            if pressed and not self._key_down[vk]:
-                self._apply_speed(speed)
+        if self._closing:
+            return
+        hk = self._hotkeys
+        actions = {
+            "normal": lambda: self._apply_speed(SPEED_NORMAL),
+            "lowest": lambda: self._apply_speed(SPEED_LOWEST),
+            "slow":   lambda: self._apply_speed(SPEED_SLOW),
+            "fast":   lambda: self._apply_speed(SPEED_FAST),
+            "freeze": self._toggle_freeze,
+        }
+        for slot, vk in hk.items():
+            pressed = bool(_u32.GetAsyncKeyState(vk) & 0x8000)
+            if pressed and not self._key_down.get(vk, False):
+                if slot in actions:
+                    actions[slot]()
             self._key_down[vk] = pressed
         self.after(self.HOTKEY_MS, self._poll_hotkeys)
 
-    def _unregister_hotkeys(self):
-        pass  # nothing to clean up
+    def _toggle_freeze(self):
+        if self._freeze_on:
+            self._freeze_on = False
+            self._apply_speed(self._pre_freeze)
+        else:
+            self._pre_freeze = self._speed
+            self._apply_speed(0, freeze=True)
 
     # ── game poll ─────────────────────────────────────────────────
     def _poll_game(self):
+        if self._closing:
+            return
         game = _game_running()
         if game:
             ok = self._shm.try_connect()
         else:
-            # Game closed — disconnect SHM so stale mapping doesn't
-            # keep the status green after the process exits.
             self._shm.disconnect()
             ok = False
         self._draw_status(ok)
@@ -463,38 +732,34 @@ class TrainerApp(tk.Tk):
 
     # ── cleanup ───────────────────────────────────────────────────
     def _on_close(self):
-        """Called when user clicks the X button."""
-        self._shm.write(1.0)
-        self._unregister_hotkeys()
+        self._closing = True
+        try:
+            self._shm.write(1.0)
+        except Exception:
+            pass
         self._shm.disconnect()
         self.destroy()
 
-    def destroy(self):
-        super().destroy()
 
-
+# ═══════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     try:
         app = TrainerApp()
         app.mainloop()
-    except Exception as e:
+    except Exception:
         import traceback
         msg = traceback.format_exc()
-        # Write log file next to script
-        # Write log next to the exe, not inside the bundled temp folder
-        exe_dir  = os.path.dirname(os.path.abspath(
-                   sys.executable if getattr(sys, "frozen", False) else __file__))
-        log_path = os.path.join(exe_dir, "trainer_error.log")
-        with open(log_path, "w") as f:
-            f.write(msg)
-        # Try to show a message box
+        log_path = os.path.join(EXE_DIR, "trainer_error.log")
         try:
-            import tkinter.messagebox as mb
+            with open(log_path, "w") as f:
+                f.write(msg)
+        except Exception:
+            pass
+        try:
             root = tk.Tk()
             root.withdraw()
-            mb.showerror("Trainer Startup Error",
+            mb.showerror("Trainer Error",
                          f"Crash logged to trainer_error.log\n\n{msg[:800]}")
             root.destroy()
         except Exception:
             print(msg)
-            input("Press Enter to close...")

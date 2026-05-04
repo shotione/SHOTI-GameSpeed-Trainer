@@ -1,13 +1,31 @@
- _____ _   _  ___ _____ ___ _    
-/  ___| | | |/ _ \_   _|_ _( )___
-\ `--.| |_| | | | || |  | ||// __|
- `--. \  _  | |_| || |  | |  \__ \
-\____/_| |_|\___/ |_| |___|  |___/
+SHOTI GameSpeed Trainer v1.1
+For Dying Light 1
+by shotilive
+═══════════════════════════════════════════
 
-  GameSpeed Trainer for Dying Light 1
-  by shotilive
-  ─────────────────────────────────────────────────────────────
+WHAT'S NEW IN v1.1
+─────────────────────────────────────────────────────────────
+  - Custom hotkeys — right-click the trainer to open
+    the hotkey settings. Bind any key or mouse button
+    (including M4/M5) to each speed preset.
+    Settings are saved to hotkeys.json and persist
+    between sessions.
 
+  - HOTKEY CHANGER button — dedicated button in the
+    top-right of the trainer window.
+
+  - Freeze / Photo Mode — stops the game completely
+    while keeping mouse look active. Default key: F5.
+    Press again to return to previous speed.
+
+  - Fixed: trainer window now closes properly with X
+
+  - Fixed: status indicator correctly goes red when
+    game is closed
+
+  - Fixed: no more CMD window flashing in background
+
+─────────────────────────────────────────────────────────────
 WHAT THIS IS
 ─────────────────────────────────────────────────────────────
 A real-time game speed controller for Dying Light 1.
@@ -40,6 +58,10 @@ INSTALLATION  (do this once)
 
   5. Done. Close the installer.
 
+  UPGRADING FROM v1.0:
+  Just run Install.exe again. It overwrites the old DLL.
+  No need to uninstall first.
+
 ─────────────────────────────────────────────────────────────
 HOW TO USE
 ─────────────────────────────────────────────────────────────
@@ -59,11 +81,23 @@ HOW TO USE
     Click once  -> activates 100x (button stays lit)
     Click again -> turns off, returns to previous speed
 
-  HOTKEYS (work while in-game, trainer just needs to be open):
+  FREEZE / PHOTO MODE:
+    Press F5 (default) -> game freezes, mouse look still works
+    Press F5 again     -> returns to previous speed
+
+  CHANGING HOTKEYS:
+    Right-click anywhere on the trainer, or click the
+    HOTKEY CHANGER button (top-right of window).
+    Click the slot you want, press your desired key
+    or mouse button, then Save & Close.
+    Supports: keyboard keys, F1-F12, numpad, M4, M5
+
+  DEFAULT HOTKEYS:
     F1  ->  Normal    (1.00x)
     F2  ->  Lowest    (0.05x)
     F3  ->  Slow-mo   (0.25x)
     F4  ->  Fast      (4.00x)
+    F5  ->  Freeze    (Photo Mode)
 
   The trainer resets speed to 1.0x automatically when closed.
 
@@ -101,6 +135,33 @@ SOMETHING BROKEN?
   Speed feels off / wrong
   -> Hit F1 or click 1.00x to reset to normal
 
+  Hotkeys not working in-game
+  -> Make sure the trainer window is open (minimized is fine)
+
+  Weird dark spot in the middle of the screen / image frozen on 50% opacity on screen
+  -> Reload save / go into options and set the max frame rate to something else and back to the previous setting.
+
+  ***If the Trainer won't quit open task manager and kill the process.***
+
+─────────────────────────────────────────────────────────────
+DISCLAIMER
+─────────────────────────────────────────────────────────────
+This tool is provided as-is for entertainment purposes only.
+Use it at your own risk.
+
+shotilive is not responsible for any damage to your game,
+save files, system, or Steam account resulting from the use
+of this software. This includes but is not limited to:
+corrupted save files, game crashes, VAC flags, or any other
+unintended side effects.
+
+Back up your save files before use if you're concerned.
+Save files are typically located at:
+  %USERPROFILE%\Saved Games\DyingLight\
+
+This tool does not modify any game files permanently.
+Removing winmm.dll and winmm_real.dll from the game folder
+fully restores the game to its original state.
 ─────────────────────────────────────────────────────────────
   Follow shotilive on TikTok and YouTube
   for Dying Light content and more tools
